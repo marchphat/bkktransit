@@ -100,47 +100,124 @@ func getAllPossibleRoutes(start: String, end: String) -> [Route] {
         return result.prefix(maxRoutes).map { $0 }
     }
     
-    let result = findAllRoutesWithLineChanges(start: start, end: end, adjacencyList: adjacencyList, stationLineColors: stationLineColors, maxRoutes: 3)
-    var stationsAllData: [[Station]] = []
-    
-    do {
-        if let url = Bundle.main.url(forResource: "Stations", withExtension: "json") {
-            let data = try Data(contentsOf: url)
-            let decodedData = try JSONDecoder().decode([Station].self, from: data)
-            
-            for routes in result {
-                var stationsData: [Station] = []
+    func findAllRoutes(start: String, end: String, adjacencyList: [String: [String]], maxRoutes: Int) -> [[String]] {
+           var result: [[String]] = []
+
+           var queue: [(path: [String], visited: Set<String>)] = [([start], [start])]
+
+           while !queue.isEmpty {
+               let (path, visited) = queue.removeFirst()
+               let currentNode = path.last!
+
+               if currentNode == end {
+                   result.append(path)
+                   continue
+               }
+
+               let neighbors = adjacencyList[currentNode] ?? []
+
+               for neighbor in neighbors {
+                   if !visited.contains(neighbor) {
+                       var newPath = path
+                       newPath.append(neighbor)
+                       var newVisited = visited
+                       newVisited.insert(neighbor)
+                       queue.append((newPath, newVisited))
+                   }
+               }
+           }
+
+        return result.prefix(maxRoutes).map { $0 }
+    }
+           
+    func combineAndSortRoutes(start: String, end: String, maxRoutes: Int) -> [[Station]] {
+        let routesWithLineChanges = findAllRoutesWithLineChanges(start: start, end: end, adjacencyList: adjacencyList, stationLineColors: stationLineColors, maxRoutes: maxRoutes)
+        let routesByStations = findAllRoutes(start: start, end: end, adjacencyList: adjacencyList, maxRoutes: maxRoutes)
+        var combinedRoutes: [[Station]] = []
+
+        do {
+            if let url = Bundle.main.url(forResource: "Stations", withExtension: "json") {
+                let data = try Data(contentsOf: url)
+                let decodedData = try JSONDecoder().decode([Station].self, from: data)
                 
-                for route in routes {
-                    if let station = decodedData.first(where: { $0.stationId == route }) {
-                        let tempStation = Station(stationId: station.stationId,
-                                                  name: station.name,
-                                                  line: station.line,
-                                                  lineColor: station.lineColor,
-                                                  isExtended: station.isExtended,
-                                                  startTime1: station.startTime1,
-                                                  startTime2: station.startTime2,
-                                                  startTime3: station.startTime3,
-                                                  startTime4: station.startTime4,
-                                                  lastTime1: station.lastTime1,
-                                                  lastTime2: station.lastTime2,
-                                                  lastTime3: station.lastTime3,
-                                                  lastTime4: station.lastTime4,
-                                                  positionX: station.positionX,
-                                                  positionY: station.positionY,
-                                                  latitude: station.latitude,
-                                                  longitude: station.longitude
-                        )
-                        stationsData.append(tempStation)
+                for routes in routesWithLineChanges {
+                    var stationsData: [Station] = []
+                    
+                    for route in routes {
+                        if let station = decodedData.first(where: { $0.stationId == route }) {
+                            let tempStation = Station(stationId: station.stationId,
+                                                      name: station.name,
+                                                      line: station.line,
+                                                      lineColor: station.lineColor,
+                                                      isExtended: station.isExtended,
+                                                      startTime1: station.startTime1,
+                                                      startTime2: station.startTime2,
+                                                      startTime3: station.startTime3,
+                                                      startTime4: station.startTime4,
+                                                      lastTime1: station.lastTime1,
+                                                      lastTime2: station.lastTime2,
+                                                      lastTime3: station.lastTime3,
+                                                      lastTime4: station.lastTime4,
+                                                      positionX: station.positionX,
+                                                      positionY: station.positionY,
+                                                      latitude: station.latitude,
+                                                      longitude: station.longitude
+                            )
+                            stationsData.append(tempStation)
+                        }
                     }
+                    combinedRoutes.append(stationsData)
                 }
                 
-                stationsAllData.append(stationsData)
+                for routes in routesByStations {
+                    var stationsData: [Station] = []
+                    
+                    for route in routes {
+                        if let station = decodedData.first(where: { $0.stationId == route }) {
+                            let tempStation = Station(stationId: station.stationId,
+                                                      name: station.name,
+                                                      line: station.line,
+                                                      lineColor: station.lineColor,
+                                                      isExtended: station.isExtended,
+                                                      startTime1: station.startTime1,
+                                                      startTime2: station.startTime2,
+                                                      startTime3: station.startTime3,
+                                                      startTime4: station.startTime4,
+                                                      lastTime1: station.lastTime1,
+                                                      lastTime2: station.lastTime2,
+                                                      lastTime3: station.lastTime3,
+                                                      lastTime4: station.lastTime4,
+                                                      positionX: station.positionX,
+                                                      positionY: station.positionY,
+                                                      latitude: station.latitude,
+                                                      longitude: station.longitude
+                            )
+                            stationsData.append(tempStation)
+                        }
+                    }
+                    if !combinedRoutes.contains(where: { $0.elementsEqual(stationsData, by: { $0.stationId == $1.stationId }) }) {
+                        combinedRoutes.append(stationsData)
+                    }
+                }
             }
+        } catch {
+            print("Error reading or decoding JSON data: \(error)")
         }
-    } catch {
-        print("Error reading or decoding JSON data: \(error)")
+        
+        combinedRoutes.sort { $0.count < $1.count }
+
+        var temp: [String] = []
+        for station in combinedRoutes[0] {
+            temp.append(station.stationId!)
+        }
+        if temp == routesWithLineChanges[0] && routesWithLineChanges.count == 1 {
+            return [combinedRoutes[0]]
+        }
+        
+        return combinedRoutes.prefix(maxRoutes).map { $0 }
     }
+
+    let stationsAllData = combineAndSortRoutes(start: start, end: end, maxRoutes: 2)
     
     var allFees: [Int] = []
     var allTotalTime: [String] = []
